@@ -90,34 +90,90 @@ KNOWN_APPS: dict[str, str] = {
     "photoshop":       "Photoshop.exe",
 }
 
-# Spoken website names → URLs (if not obviously a .com/.co.uk etc.)
+# Spoken website names → URLs.
+# Checked BEFORE any exe attempt, so these always open in the browser.
 KNOWN_SITES: dict[str, str] = {
-    "google":        "https://www.google.com",
-    "youtube":       "https://www.youtube.com",
-    "gmail":         "https://mail.google.com",
-    "google mail":   "https://mail.google.com",
-    "facebook":      "https://www.facebook.com",
-    "twitter":       "https://www.twitter.com",
-    "x":             "https://www.x.com",
-    "instagram":     "https://www.instagram.com",
-    "reddit":        "https://www.reddit.com",
-    "linkedin":      "https://www.linkedin.com",
-    "amazon":        "https://www.amazon.co.uk",
-    "ebay":          "https://www.ebay.co.uk",
-    "netflix":       "https://www.netflix.com",
-    "spotify":       "https://open.spotify.com",
-    "github":        "https://www.github.com",
-    "stackoverflow": "https://stackoverflow.com",
-    "stack overflow":"https://stackoverflow.com",
-    "wikipedia":     "https://www.wikipedia.org",
-    "bbc":           "https://www.bbc.co.uk",
-    "bbc news":      "https://www.bbc.co.uk/news",
-    "sky news":      "https://news.sky.com",
-    "weather":       "https://www.bom.gov.au/nsw/forecasts/newcastle.shtml",
-    "bom":           "https://www.bom.gov.au",
-    "paypal":        "https://www.paypal.com",
-    "chatgpt":       "https://chat.openai.com",
-    "claude":        "https://claude.ai",
+    # Search & Google services
+    "google":            "https://www.google.com",
+    "gmail":             "https://mail.google.com",
+    "google mail":       "https://mail.google.com",
+    "google drive":      "https://drive.google.com",
+    "google docs":       "https://docs.google.com",
+    "google sheets":     "https://sheets.google.com",
+    "google maps":       "https://maps.google.com",
+    "google calendar":   "https://calendar.google.com",
+    "google meet":       "https://meet.google.com",
+    "youtube":           "https://www.youtube.com",
+
+    # Social & news
+    "facebook":          "https://www.facebook.com",
+    "twitter":           "https://www.twitter.com",
+    "x":                 "https://www.x.com",
+    "instagram":         "https://www.instagram.com",
+    "reddit":            "https://www.reddit.com",
+    "linkedin":          "https://www.linkedin.com",
+    "tiktok":            "https://www.tiktok.com",
+    "pinterest":         "https://www.pinterest.com",
+    "snapchat":          "https://www.snapchat.com",
+
+    # News
+    "bbc":               "https://www.bbc.co.uk",
+    "bbc news":          "https://www.bbc.co.uk/news",
+    "sky news":          "https://news.sky.com",
+    "the guardian":      "https://www.theguardian.com",
+    "guardian":          "https://www.theguardian.com",
+    "cnn":               "https://www.cnn.com",
+    "reuters":           "https://www.reuters.com",
+
+    # Finance & trading
+    "tradingview":       "https://www.tradingview.com",
+    "trading view":      "https://www.tradingview.com",
+    "binance":           "https://www.binance.com",
+    "coinbase":          "https://www.coinbase.com",
+    "kraken":            "https://www.kraken.com",
+    "investing":         "https://www.investing.com",
+    "investing.com":     "https://www.investing.com",
+    "yahoo finance":     "https://finance.yahoo.com",
+    "market watch":      "https://www.marketwatch.com",
+    "marketwatch":       "https://www.marketwatch.com",
+    "bloomberg":         "https://www.bloomberg.com",
+    "paypal":            "https://www.paypal.com",
+    "wise":              "https://www.wise.com",
+
+    # Shopping
+    "amazon":            "https://www.amazon.co.uk",
+    "ebay":              "https://www.ebay.co.uk",
+    "etsy":              "https://www.etsy.com",
+
+    # Entertainment
+    "netflix":           "https://www.netflix.com",
+    "disney plus":       "https://www.disneyplus.com",
+    "disney+":           "https://www.disneyplus.com",
+    "prime video":       "https://www.primevideo.com",
+    "spotify":           "https://open.spotify.com",
+    "twitch":            "https://www.twitch.tv",
+
+    # Dev & productivity
+    "github":            "https://www.github.com",
+    "gitlab":            "https://www.gitlab.com",
+    "stackoverflow":     "https://stackoverflow.com",
+    "stack overflow":    "https://stackoverflow.com",
+    "wikipedia":         "https://www.wikipedia.org",
+    "notion":            "https://www.notion.so",
+    "trello":            "https://www.trello.com",
+    "jira":              "https://www.atlassian.com/software/jira",
+    "figma":             "https://www.figma.com",
+    "canva":             "https://www.canva.com",
+
+    # AI tools
+    "chatgpt":           "https://chat.openai.com",
+    "claude":            "https://claude.ai",
+    "perplexity":        "https://www.perplexity.ai",
+    "midjourney":        "https://www.midjourney.com",
+
+    # Weather
+    "weather":           "https://www.bom.gov.au/nsw/forecasts/newcastle.shtml",
+    "bom":               "https://www.bom.gov.au",
 }
 
 
@@ -145,13 +201,24 @@ class AppControl:
         if target_clean in KNOWN_APPS:
             return self._launch_app(KNOWN_APPS[target_clean], target_clean)
 
-        # 4. Try launching by name directly (user may have an unlisted app)
+        # 4. Guess a website URL for single/compound words that look like web
+        #    services (e.g. "tradingview" → https://www.tradingview.com).
+        #    Only do this when the target has no spaces or is hyphenated and
+        #    does NOT match a known desktop-app name — prevents "open notepad"
+        #    from routing to notepad.com instead of notepad.exe.
+        slug = target_clean.replace(" ", "").replace("-", "")
+        if slug.isalpha() and target_clean not in KNOWN_APPS:
+            guessed_url = f"https://www.{slug}.com"
+            logger.info("Guessing website URL: %s", guessed_url)
+            return self._open_url(guessed_url, target_clean)
+
+        # 5. Try launching by name directly (user may have an unlisted desktop app)
         exe = target_clean.replace(" ", "") + ".exe"
         result = self._launch_app(exe, target_clean)
         if "Unable" not in result:
             return result
 
-        # 5. Fall back to opening a Google search for the target
+        # 6. Fall back to opening a Google search for the target
         logger.info("App '%s' not found — opening Google search.", target_clean)
         search_url = f"https://www.google.com/search?q={quote_plus(target)}"
         webbrowser.open(search_url)

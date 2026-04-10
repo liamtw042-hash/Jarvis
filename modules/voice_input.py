@@ -146,39 +146,57 @@ class VoiceInput:
             )
             # Threshold already set to DEFAULT_ENERGY_THRESHOLD in __init__
 
-    # ── Whisper initialisation ────────────────────────────────────────────────
+    # ── STT initialisation ────────────────────────────────────────────────────
 
     def _init_whisper(self):
         """
-        Set up Whisper transcription.
-        Priority:
-          1. OpenAI Whisper API  (OPENAI_API_KEY set)
-          2. Local whisper model (pip install openai-whisper)
-          3. Google STT fallback (always available, free)
+        Set up speech-to-text.
+
+        Default: Google STT — free, instant, no quota.
+
+        Opt-in alternatives (set in .env):
+          USE_WHISPER=true        → OpenAI Whisper API (needs OPENAI_API_KEY)
+          WHISPER_LOCAL_MODEL=base → local openai-whisper (needs pip install openai-whisper)
+
+        Whisper API is NOT auto-enabled even when OPENAI_API_KEY is present,
+        because an exceeded quota causes a slow retry delay on every command.
         """
-        api_key = os.getenv("OPENAI_API_KEY")
-        if api_key:
+        # ── Local Whisper (offline, no quota) ────────────────────────────────
+        # Enabled when the openai-whisper package is installed AND
+        # WHISPER_LOCAL_MODEL is explicitly set in .env.
+        if os.getenv("WHISPER_LOCAL_MODEL"):
             try:
-                from openai import OpenAI
-                self._whisper_client = OpenAI(api_key=api_key)
-                self._whisper_mode = "api"
-                logger.info("Whisper mode: OpenAI API")
+                import whisper  # type: ignore
+                model_name = os.getenv("WHISPER_LOCAL_MODEL", "base")
+                logger.info("Loading local Whisper model '%s' …", model_name)
+                self._whisper_local = whisper.load_model(model_name)
+                self._whisper_mode = "local"
+                logger.info("STT mode: local Whisper (%s)", model_name)
                 return
             except ImportError:
-                logger.warning("openai package not found — trying local whisper.")
+                logger.warning(
+                    "WHISPER_LOCAL_MODEL set but openai-whisper not installed — "
+                    "falling back to Google STT."
+                )
 
-        try:
-            import whisper  # type: ignore
-            model_name = os.getenv("WHISPER_LOCAL_MODEL", "base")
-            logger.info("Loading local Whisper model '%s' …", model_name)
-            self._whisper_local = whisper.load_model(model_name)
-            self._whisper_mode = "local"
-            logger.info("Whisper mode: local (%s)", model_name)
-        except ImportError:
-            self._whisper_mode = "google"
-            logger.warning(
-                "No Whisper available — using Google STT for all transcription."
-            )
+        # ── Whisper API (opt-in only) ─────────────────────────────────────────
+        if os.getenv("USE_WHISPER", "false").lower() == "true":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key:
+                try:
+                    from openai import OpenAI
+                    self._whisper_client = OpenAI(api_key=api_key)
+                    self._whisper_mode = "api"
+                    logger.info("STT mode: OpenAI Whisper API (opt-in)")
+                    return
+                except ImportError:
+                    logger.warning("openai package not found — falling back to Google STT.")
+            else:
+                logger.warning("USE_WHISPER=true but OPENAI_API_KEY not set — falling back.")
+
+        # ── Google STT (default) ──────────────────────────────────────────────
+        self._whisper_mode = "google"
+        logger.info("STT mode: Google STT (default)")
 
     # ── Core recording (sounddevice VAD) ─────────────────────────────────────
 

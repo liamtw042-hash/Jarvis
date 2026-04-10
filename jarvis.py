@@ -204,7 +204,7 @@ class JarvisAssistant:
         # ── Open app / website ────────────────────────────────────────────────
         m = re.search(r"\b(?:open|launch|start|go to|navigate to|pull up)\s+(.+)", text)
         if m:
-            return "open", {"target": m.group(1).strip()}
+            return "open", {"target": self._clean_target(m.group(1))}
 
         # ── Web search ────────────────────────────────────────────────────────
         m = re.search(
@@ -213,7 +213,7 @@ class JarvisAssistant:
             text,
         )
         if m:
-            return "search", {"query": m.group(1).strip()}
+            return "search", {"query": self._clean_target(m.group(1))}
 
         # ── Forex ─────────────────────────────────────────────────────────────
         if re.search(
@@ -254,6 +254,25 @@ class JarvisAssistant:
 
         # ── Fallback → let Claude answer ──────────────────────────────────────
         return "general", {}
+
+    # ── Target cleaning ───────────────────────────────────────────────────────
+
+    # Filler phrases that STT commonly appends to targets / queries.
+    _FILLER_RE = re.compile(
+        r"\b("
+        r"please|for me|right now|now|just|quickly|"
+        r"on my computer|on my pc|on my laptop|"
+        r"on my google|on my browser|in my browser|"
+        r"on the computer|on the internet|on the web|"
+        r"using (my |the )?(browser|computer|pc|laptop|google|internet)"
+        r")\b",
+        re.IGNORECASE,
+    )
+
+    def _clean_target(self, raw: str) -> str:
+        """Strip filler words from a voice-extracted target or query string."""
+        cleaned = self._FILLER_RE.sub("", raw)
+        return " ".join(cleaned.split())  # collapse extra whitespace
 
     # ── Intent handlers ───────────────────────────────────────────────────────
 
