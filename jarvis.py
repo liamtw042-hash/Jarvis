@@ -87,7 +87,7 @@ class JarvisAssistant:
                 if still_active:
                     # Already mid-conversation — listen directly
                     command_audio = self.voice_input.listen_for_command()
-                    if not command_audio:
+                    if command_audio is None:
                         in_conversation = False
                         print("\n  (Conversation mode ended — say 'Hey Jarvis' to restart)\n")
                         continue
@@ -106,7 +106,7 @@ class JarvisAssistant:
                         command_text = inline_cmd
                     else:
                         command_audio = self.voice_input.listen_for_command()
-                        if not command_audio:
+                        if command_audio is None:
                             continue
                         command_text = self.voice_input.transcribe(command_audio)
 

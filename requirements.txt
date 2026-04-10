@@ -1,12 +1,10 @@
 # ============================================================
 # JARVIS - Voice Assistant Requirements
+# Python 3.11+ compatible (including 3.14)
 # Install with: pip install -r requirements.txt
 #
-# NOTE: pyaudio requires PortAudio on Windows.
-# If "pip install pyaudio" fails, try:
-#   pip install pipwin && pipwin install pyaudio
-# OR download the wheel from:
-#   https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio
+# All packages here use pre-built binary wheels on Windows —
+# no Microsoft C++ Build Tools required.
 # ============================================================
 
 # --- AI & Language Models ---
@@ -14,13 +12,14 @@ anthropic>=0.25.0          # Claude AI (brain of JARVIS)
 openai>=1.30.0             # Whisper STT transcription
 
 # --- Voice Input ---
-SpeechRecognition>=3.10.0  # Wake word detection + audio capture
-pyaudio>=0.2.14            # Microphone access (requires PortAudio)
+SpeechRecognition>=3.10.0  # Google STT for wake-word (pure Python — no PyAudio needed)
+sounddevice>=0.4.6         # Microphone recording (pre-built wheel, bundles PortAudio)
 
 # --- Voice Output ---
 elevenlabs>=1.2.0          # British voice TTS
-pyttsx3>=2.90              # Fallback TTS if ElevenLabs unavailable
-pygame>=2.5.2              # Audio playback
+pyttsx3>=2.90              # Fallback TTS (uses Windows SAPI5 — no compilation)
+sounddevice>=0.4.6         # Audio playback (same package as above)
+soundfile>=0.12.1          # Read/write WAV in-memory (pre-built wheel, bundles libsndfile)
 
 # --- Web & Data ---
 requests>=2.31.0           # HTTP requests
@@ -28,19 +27,14 @@ python-dotenv>=1.0.0       # Load .env API keys
 beautifulsoup4>=4.12.3     # HTML parsing for web results
 duckduckgo-search>=6.1.0   # Web search (no API key needed)
 
-# --- Math & Audio Generation ---
-numpy>=1.26.0              # Activation sound synthesis
+# --- Math & Audio ---
+numpy>=1.26.0              # Activation sound synthesis & audio processing
 
 # --- Windows System Control ---
-pycaw>=20181226            # Windows audio volume control
-comtypes>=1.4.0            # COM interface (required by pycaw)
-pywin32>=306               # Windows API bindings
+pycaw>=20181226            # Windows audio volume control (pure Python COM)
+comtypes>=1.4.0            # COM interface (pure Python, required by pycaw)
 
-# --- Optional: Local Whisper (if you prefer offline STT) ---
-# Uncomment these if you don't have an OpenAI API key.
-# Requires ~1.5GB disk space and ffmpeg installed.
+# --- Optional: Local Whisper (offline STT without OpenAI API key) ---
+# Requires ~1.5GB disk space and ffmpeg. Uncomment to enable.
 # openai-whisper>=20231117
 # torch>=2.1.0
-
-# --- Optional: NewsAPI (uses free BBC RSS feed if absent) ---
-# newsapi-python>=0.2.7
