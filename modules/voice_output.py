@@ -26,8 +26,8 @@ import sounddevice as sd
 
 logger = logging.getLogger("JARVIS.VoiceOutput")
 
-# ElevenLabs "Daniel" — British male.
-# Override with ELEVENLABS_VOICE_ID in .env
+# ElevenLabs "Daniel" — British male, clear and authoritative.
+# Override with ELEVENLABS_VOICE_ID in your .env
 DEFAULT_VOICE_ID = "onwK4e9ZLuTAKqWW03F9"
 
 # Sample rate used for the activation chime and ElevenLabs PCM output
@@ -67,13 +67,14 @@ class VoiceOutput:
             self._el_client = None
             self._voice_id  = None
 
-    # ── pyttsx3 / Windows SAPI fallback ──────────────────────────────────────
+    # ── Fallback TTS (pyttsx3 / Windows SAPI) ────────────────────────────────
 
     def _init_fallback_tts(self):
         try:
             import pyttsx3  # type: ignore
 
             engine = pyttsx3.init()
+            # Prefer a deeper/male voice if available
             for v in engine.getProperty("voices"):
                 name = v.name.lower()
                 if "david" in name or "mark" in name or "george" in name:
@@ -92,7 +93,7 @@ class VoiceOutput:
     def _generate_activation_sound(self):
         """
         Synthesise a futuristic rising-chime activation sound as a float32
-        numpy array.  Stored in memory — no disk I/O needed.
+        numpy array kept in memory — no disk I/O, no wav file.
 
         Three-stage signature:
           1. Rapid frequency sweep  400 → 900 Hz  (rising chirp)
@@ -101,24 +102,24 @@ class VoiceOutput:
         """
         sr = PLAYBACK_SR
 
-        def make_segment(f0: float, f1: float, duration: float, amp: float, fade: str = "out") -> np.ndarray:
+        def make_tone(freq_start, freq_end, duration, amplitude, fade="out"):
             n = int(sr * duration)
-            t = np.linspace(0.0, duration, n, endpoint=False)
-            freqs = np.linspace(f0, f1, n)
-            wave  = amp * np.sin(2 * np.pi * freqs * t)
+            t = np.linspace(0, duration, n, endpoint=False)
+            freqs = np.linspace(freq_start, freq_end, n)
+            wave_data = amplitude * np.sin(2 * np.pi * freqs * t)
             if fade == "out":
-                env = np.linspace(1.0, 0.0, n) ** 1.5
+                envelope = np.linspace(1.0, 0.0, n) ** 1.5
             elif fade == "in":
-                env = np.linspace(0.0, 1.0, n) ** 0.5
+                envelope = np.linspace(0.0, 1.0, n) ** 0.5
             else:
-                env = np.ones(n)
-            return (wave * env).astype(np.float32)
+                envelope = np.ones(n)
+            return (wave_data * envelope).astype(np.float32)
 
-        chirp   = make_segment(400,  900,  0.25, 0.55, fade="in")
+        chirp   = make_tone(400,  900,  0.25, 0.55, fade="in")
         silence = np.zeros(int(sr * 0.06), dtype=np.float32)
-        ping    = make_segment(1400, 1400, 0.18, 0.75, fade="out")
+        ping    = make_tone(1400, 1400, 0.18, 0.75, fade="out")
         gap     = np.zeros(int(sr * 0.04), dtype=np.float32)
-        confirm = make_segment(1800, 1600, 0.40, 0.60, fade="out")
+        confirm = make_tone(1800, 1600, 0.40, 0.60, fade="out")
 
         sound = np.concatenate([chirp, silence, ping, gap, confirm])
 
@@ -127,7 +128,7 @@ class VoiceOutput:
         if peak > 0:
             sound = sound / peak * 0.88
 
-        self._activation_sound = sound  # float32, shape (n,)
+        self._activation_sound = sound  # float32 array, shape (n,)
         logger.info("Activation sound synthesised (%d samples).", len(sound))
 
     def play_activation_sound(self):
@@ -160,7 +161,7 @@ class VoiceOutput:
     def _speak_elevenlabs(self, text: str):
         """
         Request audio from ElevenLabs as raw 16-bit PCM at 22 050 Hz.
-        Play in-memory via sounddevice — no temp files, no external tools.
+        Decode in-memory and play via sounddevice — no temp files, no external tools.
         """
         try:
             from elevenlabs import VoiceSettings  # type: ignore
@@ -179,7 +180,7 @@ class VoiceOutput:
                 ),
             )
 
-            # Collect all PCM chunks
+            # Collect all PCM chunks into one bytes object
             pcm_bytes = b"".join(audio_stream)
 
             if not pcm_bytes:
@@ -189,8 +190,8 @@ class VoiceOutput:
                 return
 
             # Decode int16 PCM → float32 in [-1, 1] for sounddevice
-            audio_int16  = np.frombuffer(pcm_bytes, dtype=np.int16)
-            audio_float  = audio_int16.astype(np.float32) / 32768.0
+            audio_int16 = np.frombuffer(pcm_bytes, dtype=np.int16)
+            audio_float = audio_int16.astype(np.float32) / 32768.0
 
             sd.play(audio_float, samplerate=PLAYBACK_SR)
             sd.wait()
