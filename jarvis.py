@@ -44,6 +44,7 @@ class JarvisAssistant:
         from modules.system_control import SystemControl
         from modules.timer_alarm import TimerAlarm
         from modules.email_reader import EmailReader
+        from modules.market_scanner import MarketScanner
 
         self.voice_output = VoiceOutput()
         self.voice_input = VoiceInput()
@@ -60,6 +61,9 @@ class JarvisAssistant:
         self.timer_alarm = TimerAlarm(self.voice_output)
 
         self.email_reader = EmailReader()
+
+        # MarketScanner gets a reference to voice_output for unprompted alerts
+        self.market_scanner = MarketScanner(self.voice_output)
 
         self.running = False
 
@@ -230,6 +234,14 @@ class JarvisAssistant:
         if re.search(r"\b(email|emails|inbox|mail|messages)\b", text):
             return "email", {}
 
+        # ── Market setups scan ────────────────────────────────────────────────
+        if re.search(
+            r"\b(any\s+setups?|check\s+setups?|scan\s+setups?|trading\s+setups?|"
+            r"forex\s+setups?|market\s+setups?|scan\s+(?:the\s+)?market)\b",
+            text,
+        ):
+            return "setups", {}
+
         # ── Remember something ────────────────────────────────────────────────
         m = re.search(r"(?:remember|note down|don.t forget|make a note)\s+(?:that\s+)?(.+)", text)
         if m:
@@ -293,6 +305,7 @@ class JarvisAssistant:
             "recall":    lambda: self._handle_recall(),
             "joke":      lambda: self.ai_brain.tell_joke(),
             "calculate": lambda: self.system_control.calculate(params["expression"]),
+            "setups":    lambda: self.market_scanner.scan_now(),
             "stop":      lambda: "Of course, sir.  I'm standing by.",
             "general":   lambda: self.ai_brain.chat(original),
         }
@@ -318,14 +331,16 @@ class JarvisAssistant:
     # ── Timer / alarm notifications ───────────────────────────────────────────
 
     def _flush_notifications(self):
-        """Speak any pending timer/alarm alerts without blocking the loop."""
-        while not self.timer_alarm.notification_queue.empty():
-            try:
-                msg = self.timer_alarm.notification_queue.get_nowait()
-                print(f"\n  JARVIS : {msg}\n")
-                self.voice_output.speak(msg)
-            except queue.Empty:
-                break
+        """Speak any pending timer/alarm/market-scanner alerts without blocking the loop."""
+        for source in (self.timer_alarm.notification_queue,
+                       self.market_scanner.notification_queue):
+            while not source.empty():
+                try:
+                    msg = source.get_nowait()
+                    print(f"\n  JARVIS : {msg}\n")
+                    self.voice_output.speak(msg)
+                except queue.Empty:
+                    break
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
 

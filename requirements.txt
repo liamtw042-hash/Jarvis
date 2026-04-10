@@ -26,6 +26,8 @@ requests>=2.31.0           # HTTP requests
 python-dotenv>=1.0.0       # Load .env API keys
 beautifulsoup4>=4.12.3     # HTML parsing for web results
 duckduckgo-search>=6.1.0   # Web search (no API key needed)
+yfinance>=0.2.36           # Forex OHLC data for market scanner (pre-built wheel)
+pandas>=2.1.0              # DataFrame resampling for 4H candles (pre-built wheel)
 
 # --- Math & Audio ---
 numpy>=1.26.0              # Activation sound synthesis & audio processing
