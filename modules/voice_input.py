@@ -46,20 +46,82 @@ WAKE_PHRASES = [
 class VoiceInput:
     """Handles all microphone input for JARVIS without PyAudio."""
 
+    # Fallback RMS threshold used when calibration cannot run
+    DEFAULT_ENERGY_THRESHOLD = 500.0
+
     def __init__(self):
         self._recognizer = sr.Recognizer()
-        # RMS energy threshold — calibrated against ambient noise in __init__
-        self._energy_threshold: float = 500.0
+        self._energy_threshold: float = self.DEFAULT_ENERGY_THRESHOLD
+        # Resolve a concrete device index before any recording attempt so we
+        # never pass device=-1 (sounddevice's "no default set" sentinel) to
+        # sd.rec() or sd.InputStream().
+        self._input_device: int | None = self._select_input_device()
         self._calibrate()
         self._init_whisper()
+
+    # ── Device selection ──────────────────────────────────────────────────────
+
+    def _select_input_device(self) -> int | None:
+        """
+        Return a usable input-device index, or None if one cannot be found.
+
+        Strategy
+        ────────
+        1. Read sd.default.device[0].  If it is not -1 and actually has input
+           channels, use it.
+        2. Otherwise scan all devices and return the first one that has at
+           least one input channel.
+        3. If nothing is found, return None and let sounddevice try its own
+           default (recording will fail gracefully if the system truly has no
+           microphone).
+        """
+        # ── Try the OS-reported default input ────────────────────────────────
+        try:
+            default_idx = sd.default.device[0]  # tuple: (input, output)
+            if default_idx != -1:
+                info = sd.query_devices(default_idx)
+                if info["max_input_channels"] > 0:
+                    logger.info(
+                        "Input device: '%s' (index %d)", info["name"], default_idx
+                    )
+                    return int(default_idx)
+        except Exception as exc:
+            logger.debug("Could not read sd.default.device: %s", exc)
+
+        # ── Scan all devices for the first with input channels ────────────────
+        try:
+            for idx, dev in enumerate(sd.query_devices()):
+                if dev["max_input_channels"] > 0:
+                    logger.info(
+                        "Input device (fallback scan): '%s' (index %d)",
+                        dev["name"], idx,
+                    )
+                    return idx
+        except Exception as exc:
+            logger.debug("Device scan failed: %s", exc)
+
+        logger.warning(
+            "No input device found.  Microphone features will be unavailable."
+        )
+        return None
 
     # ── Calibration ───────────────────────────────────────────────────────────
 
     def _calibrate(self):
         """
-        Record 2 seconds of ambient noise via sounddevice and set the
-        energy threshold to 4× the ambient RMS level (minimum 300).
+        Record 2 seconds of ambient noise and set the RMS energy threshold to
+        4× the ambient level (minimum 300).
+
+        If calibration fails for any reason (no mic, device error, etc.) JARVIS
+        continues with DEFAULT_ENERGY_THRESHOLD — it never crashes or loops here.
         """
+        if self._input_device is None:
+            logger.warning(
+                "Skipping calibration — no input device available.  "
+                "Using default threshold %.0f.", self.DEFAULT_ENERGY_THRESHOLD
+            )
+            return
+
         logger.info("Calibrating microphone (2 s) …")
         try:
             samples = sd.rec(
@@ -67,6 +129,7 @@ class VoiceInput:
                 samplerate=SAMPLE_RATE,
                 channels=1,
                 dtype="int16",
+                device=self._input_device,
                 blocking=True,
             )
             rms = float(np.sqrt(np.mean(samples.astype(np.float64) ** 2)))
@@ -76,7 +139,12 @@ class VoiceInput:
                 self._energy_threshold,
             )
         except Exception as exc:
-            logger.warning("Microphone calibration failed: %s — using default threshold.", exc)
+            logger.warning(
+                "Microphone calibration failed (%s) — "
+                "using default threshold %.0f.",
+                exc, self.DEFAULT_ENERGY_THRESHOLD,
+            )
+            # Threshold already set to DEFAULT_ENERGY_THRESHOLD in __init__
 
     # ── Whisper initialisation ────────────────────────────────────────────────
 
@@ -150,6 +218,7 @@ class VoiceInput:
                 samplerate=SAMPLE_RATE,
                 channels=1,
                 dtype="int16",
+                device=self._input_device,   # explicit index — never -1
             ) as stream:
                 while True:
                     chunk, _ = stream.read(CHUNK_FRAMES)
