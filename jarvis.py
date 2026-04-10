@@ -11,6 +11,7 @@ Ties together every subsystem:
 import logging
 import queue
 import re
+import threading
 import time
 
 logger = logging.getLogger("JARVIS.Core")
@@ -126,10 +127,25 @@ class JarvisAssistant:
                 # ── Route and respond ─────────────────────────────────────
                 response = self.process_command(command_text)
                 print(f"  JARVIS : {response}\n")
-                self.voice_output.speak(response)
+                new_cmd = self._speak_with_interrupt_check(response)
 
                 in_conversation = True
                 last_response_time = time.time()
+
+                # ── Handle mid-speech interrupt ───────────────────────────
+                if new_cmd and len(new_cmd.strip()) >= 2:
+                    print(f"\n  You    : {new_cmd}")
+                    try:
+                        response = self.process_command(new_cmd)
+                    except Exception as exc:
+                        logger.error("Error handling interrupted command: %s", exc)
+                        response = (
+                            "I ran into a bit of trouble with that, sir.  "
+                            "Please try again."
+                        )
+                    print(f"  JARVIS : {response}\n")
+                    self._speak_with_interrupt_check(response)
+                    last_response_time = time.time()
 
             except KeyboardInterrupt:
                 break
@@ -311,6 +327,60 @@ class JarvisAssistant:
         }
         handler = handlers.get(intent, handlers["general"])
         return handler()
+
+    # ── Interruptible speech ──────────────────────────────────────────────────
+
+    def _speak_with_interrupt_check(self, text: str) -> "str | None":
+        """
+        Speak *text* in a background thread while the main thread polls the
+        microphone for the wake word.  If "Hey Jarvis" (or "Jarvis") is heard
+        during playback, stop speaking immediately, play the activation chime,
+        and listen for the new command.
+
+        Returns the new command string if an interrupt was detected, or None if
+        speech completed normally.
+
+        Note: simultaneous input and output streams work because they use
+        separate physical devices (microphone vs. speaker) on typical Windows
+        setups.  On half-duplex hardware the interrupt check degrades
+        gracefully — the wake-word listen will simply time out each cycle.
+        """
+        done_event = threading.Event()
+
+        def _speak():
+            self.voice_output.speak(text)
+            done_event.set()
+
+        speak_thread = threading.Thread(target=_speak, daemon=True)
+        speak_thread.start()
+
+        interrupt_cmd: "str | None" = None
+
+        while not done_event.wait(timeout=0.05):
+            # Poll for wake word with a short pre-speech timeout so each
+            # check cycle returns quickly if the user isn't speaking.
+            detected, inline = self.voice_input.listen_for_wake_word(
+                pre_speech_timeout=1.5
+            )
+            if detected:
+                self.voice_output.stop_speaking()
+                done_event.wait(timeout=1.0)   # let speak thread settle
+
+                print("\n  (Interrupted — listening…)\n")
+                self.voice_output.play_activation_sound()
+
+                if inline and len(inline) > 2:
+                    interrupt_cmd = inline
+                else:
+                    audio = self.voice_input.listen_for_command()
+                    interrupt_cmd = (
+                        self.voice_input.transcribe(audio)
+                        if audio is not None else ""
+                    )
+                break
+
+        speak_thread.join(timeout=2.0)
+        return interrupt_cmd
 
     def _handle_search(self, query: str) -> str:
         results = self.web_search.search(query)

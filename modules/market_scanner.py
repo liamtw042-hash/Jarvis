@@ -357,43 +357,30 @@ class MarketScanner:
     def _format_alert(self, setup: dict) -> str:
         pair      = setup["pair"]
         direction = setup["direction"]
-        price     = setup["current_price"]
-        fvg       = setup["fvg"]
-        dp        = PRICE_DECIMALS.get(pair, 4)
-
-        action    = "buy" if direction == "bullish" else "sell"
+        action    = "BUY" if direction == "bullish" else "SELL"
         dir_word  = "bullish" if direction == "bullish" else "bearish"
 
         return (
-            f"Attention, sir — a {dir_word} setup has formed on {pair}.  "
-            f"The 4-hour trend is {dir_word}, with the 50 EMA above the 200 EMA.  "
-            f"Price is currently at {price:.{dp}f} and has pulled back into a "
-            f"Fair Value Gap between {fvg['bottom']:.{dp}f} and {fvg['top']:.{dp}f}.  "
-            f"One-hour confirmation is positive.  "
-            f"Potential {action} opportunity."
+            f"{pair} — potential {action}. "
+            f"Price is pulling back into a {dir_word} FVG on the 4 hour "
+            f"with {dir_word} EMA structure."
         )
 
     def _format_scan_result(self, setups: list[dict]) -> str:
         """Build a spoken summary for an on-demand scan."""
         if not setups:
-            return (
-                "I've scanned GBPUSD, EURUSD, AUDUSD, and USDJPY and found "
-                "no qualifying setups at this moment, sir."
-            )
+            return "No setups on any pair at this time, sir."
 
         lines = []
         for s in setups:
-            dp    = PRICE_DECIMALS.get(s["pair"], 4)
-            fvg   = s["fvg"]
+            action   = "BUY" if s["direction"] == "bullish" else "SELL"
+            dir_word = s["direction"]
             lines.append(
-                f"{s['pair']} is showing a {s['direction']} setup: "
-                f"price at {s['current_price']:.{dp}f} inside a Fair Value Gap "
-                f"between {fvg['bottom']:.{dp}f} and {fvg['top']:.{dp}f}"
+                f"{s['pair']}: potential {action}, "
+                f"price pulling back into a {dir_word} FVG on the 4 hour"
             )
 
-        count = len(setups)
-        intro = f"I found {count} setup{'s' if count > 1 else ''}, sir.  "
-        return intro + "; and ".join(lines) + "."
+        return "  ".join(lines) + "."
 
     # ── Cooldown / dedup ──────────────────────────────────────────────────────
 
@@ -440,12 +427,6 @@ class MarketScanner:
         On-demand scan triggered by voice command.
         Runs synchronously and returns a spoken result string.
         """
-        if self._data_source == "none":
-            return (
-                "The market scanner isn't available, sir.  "
-                "Please install yfinance with: pip install yfinance"
-            )
-
         logger.info("On-demand market scan triggered.")
         try:
             setups = self._run_scan()

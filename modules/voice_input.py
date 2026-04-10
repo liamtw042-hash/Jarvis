@@ -46,8 +46,10 @@ WAKE_PHRASES = [
 class VoiceInput:
     """Handles all microphone input for JARVIS without PyAudio."""
 
-    # Fallback RMS threshold used when calibration cannot run
-    DEFAULT_ENERGY_THRESHOLD = 500.0
+    # Fallback RMS threshold used when calibration cannot run.
+    # Lower value catches quieter/softer speech; calibration will
+    # override this at runtime based on actual ambient noise.
+    DEFAULT_ENERGY_THRESHOLD = 300.0
 
     def __init__(self):
         self._recognizer = sr.Recognizer()
@@ -277,9 +279,18 @@ class VoiceInput:
 
     # ── Wake-word detection ───────────────────────────────────────────────────
 
-    def listen_for_wake_word(self) -> tuple[bool, str]:
+    def listen_for_wake_word(
+        self, pre_speech_timeout: float = 5.0
+    ) -> tuple[bool, str]:
         """
         Record a short burst and check for the wake phrase via Google STT.
+
+        Parameters
+        ----------
+        pre_speech_timeout : float
+            Seconds to wait for speech before giving up.  Pass a shorter value
+            (e.g. 1.5) when polling for interrupt during TTS playback so that
+            each check cycle doesn't block the calling thread for too long.
 
         Returns
         -------
@@ -288,7 +299,7 @@ class VoiceInput:
             e.g. "Hey Jarvis what time is it?" → "what time is it?"
         """
         audio = self._record_with_vad(
-            pre_speech_timeout=5.0,
+            pre_speech_timeout=pre_speech_timeout,
             max_duration=5.0,
             silence_duration=0.8,
         )
@@ -318,14 +329,14 @@ class VoiceInput:
 
     def listen_for_command(self) -> "np.ndarray | None":
         """
-        Record a full voice command (up to 30 s) after the wake word fires.
+        Record a full voice command (up to 35 s) after the wake word fires.
         Returns numpy int16 array or None if nothing was heard.
         """
         logger.info("Listening for command …")
         return self._record_with_vad(
             pre_speech_timeout=7.0,
-            max_duration=30.0,
-            silence_duration=1.5,
+            max_duration=35.0,    # slightly longer to capture full commands
+            silence_duration=2.0, # extra buffer so end-of-sentence isn't clipped
         )
 
     # ── Transcription ─────────────────────────────────────────────────────────

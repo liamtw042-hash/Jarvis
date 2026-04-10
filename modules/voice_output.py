@@ -210,6 +210,23 @@ class VoiceOutput:
         except Exception as exc:
             logger.error("pyttsx3 TTS error: %s", exc)
 
+    # ── Interrupt ─────────────────────────────────────────────────────────────
+
+    def stop_speaking(self):
+        """
+        Interrupt any ongoing speech immediately.
+        Safe to call from any thread.
+        """
+        try:
+            sd.stop()
+        except Exception:
+            pass
+        if self._fallback_tts:
+            try:
+                self._fallback_tts.stop()
+            except Exception:
+                pass
+
     # ── Cleanup ───────────────────────────────────────────────────────────────
 
     def cleanup(self):
