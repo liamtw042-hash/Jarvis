@@ -1,0 +1,46 @@
+# ============================================================
+# JARVIS - Voice Assistant Requirements
+# Install with: pip install -r requirements.txt
+#
+# NOTE: pyaudio requires PortAudio on Windows.
+# If "pip install pyaudio" fails, try:
+#   pip install pipwin && pipwin install pyaudio
+# OR download the wheel from:
+#   https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio
+# ============================================================
+
+# --- AI & Language Models ---
+anthropic>=0.25.0          # Claude AI (brain of JARVIS)
+openai>=1.30.0             # Whisper STT transcription
+
+# --- Voice Input ---
+SpeechRecognition>=3.10.0  # Wake word detection + audio capture
+pyaudio>=0.2.14            # Microphone access (requires PortAudio)
+
+# --- Voice Output ---
+elevenlabs>=1.2.0          # British voice TTS
+pyttsx3>=2.90              # Fallback TTS if ElevenLabs unavailable
+pygame>=2.5.2              # Audio playback
+
+# --- Web & Data ---
+requests>=2.31.0           # HTTP requests
+python-dotenv>=1.0.0       # Load .env API keys
+beautifulsoup4>=4.12.3     # HTML parsing for web results
+duckduckgo-search>=6.1.0   # Web search (no API key needed)
+
+# --- Math & Audio Generation ---
+numpy>=1.26.0              # Activation sound synthesis
+
+# --- Windows System Control ---
+pycaw>=20181226            # Windows audio volume control
+comtypes>=1.4.0            # COM interface (required by pycaw)
+pywin32>=306               # Windows API bindings
+
+# --- Optional: Local Whisper (if you prefer offline STT) ---
+# Uncomment these if you don't have an OpenAI API key.
+# Requires ~1.5GB disk space and ffmpeg installed.
+# openai-whisper>=20231117
+# torch>=2.1.0
+
+# --- Optional: NewsAPI (uses free BBC RSS feed if absent) ---
+# newsapi-python>=0.2.7
